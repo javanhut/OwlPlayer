@@ -49,9 +49,16 @@ pub struct Ui {
     /// Whether the viewer wants the queue panel at all, independent of
     /// whether the chrome is currently faded out.
     queue_wanted: Cell<bool>,
-    /// Last time the pointer or keyboard did anything.
+    /// Last time the pointer or keyboard did anything, used only to decide
+    /// when to hide the pointer itself.
     last_activity: Cell<std::time::Instant>,
-    chrome_shown: Cell<bool>,
+    /// Pointer position in window coordinates, and whether it is inside at
+    /// all. Chrome visibility is a function of this rather than of a timer:
+    /// each piece belongs to an edge and appears when the pointer is near
+    /// that edge, which is predictable in a way a timeout is not.
+    pointer: Cell<(f64, f64)>,
+    pointer_inside: Cell<bool>,
+    cursor_shown: Cell<bool>,
     subtitle: gtk::Label,
     /// The `text_revision` already rendered, so the label is rebuilt only
     /// when the cue changes rather than every frame.
@@ -188,7 +195,9 @@ pub fn build(app: &adw::Application) -> Rc<Ui> {
         transport: transport.container.clone(),
         queue_wanted: Cell::new(true),
         last_activity: Cell::new(std::time::Instant::now()),
-        chrome_shown: Cell::new(true),
+        pointer: Cell::new((0.0, 0.0)),
+        pointer_inside: Cell::new(false),
+        cursor_shown: Cell::new(true),
         subtitle,
         subtitle_revision: Cell::new(u64::MAX),
         more_button: transport.more.clone(),
@@ -203,9 +212,7 @@ pub fn build(app: &adw::Application) -> Rc<Ui> {
 
     wire(&ui, &transport);
     ui.refresh_transport();
-    // Nothing is playing yet, so open on the files rather than on a blank
-    // stage: the first thing the app shows should be something to pick.
-    ui.show_browse("home");
+    ui.show_player();
     ui
 }
 
@@ -247,6 +254,7 @@ fn build_sidebar() -> (gtk::Box, Vec<gtk::ListBox>) {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let primary = nav_list(&[
         ("Now Playing", "media-playback-start-symbolic", "player"),
+        ("Queue", "view-list-symbolic", "queue"),
         ("Library", "folder-symbolic", "home"),
         ("Playlists", "view-list-symbolic", ""),
         ("Watch Later", "alarm-symbolic", ""),
@@ -443,7 +451,6 @@ struct TransportWidgets {
     previous: gtk::Button,
     next: gtk::Button,
     fullscreen: gtk::Button,
-    queue_toggle: gtk::Button,
     more: gtk::Button,
     open: gtk::Button,
     browse: gtk::Button,
@@ -478,15 +485,12 @@ impl TransportWidgets {
         // Opening a file is the single most common thing anyone does with
         // a player, so it gets a button of its own rather than a line in a
         // menu behind "…".
+        // The queue toggle lives in the sidebar now, beside Now Playing,
+        // which is where it belongs: it is a view, not a transport control.
         let open = flat_button("folder-open-symbolic", "Open files (O)");
         let browse = flat_button("view-grid-symbolic", "Browse your media (B)");
-        let cast = flat_button("video-display-symbolic", "Playing on another screen is not available yet");
-        cast.set_sensitive(false);
-        let queue_toggle = flat_button("view-list-symbolic", "Show or hide the queue");
         left.append(&open);
         left.append(&browse);
-        left.append(&cast);
-        left.append(&queue_toggle);
 
         let centre = gtk::Box::new(gtk::Orientation::Horizontal, 14);
         centre.set_halign(gtk::Align::Center);
@@ -546,7 +550,6 @@ impl TransportWidgets {
             previous,
             next,
             fullscreen,
-            queue_toggle,
             more,
             open,
             browse,
@@ -563,10 +566,18 @@ fn flat_button(icon: &str, tooltip: &str) -> gtk::Button {
 
 /// Height reserved for the transport bar, so a caption is never drawn
 /// underneath the controls.
-const TRANSPORT_CLEARANCE: i32 = 112;
+const TRANSPORT_CLEARANCE: i32 = 150;
 
-/// How long the pointer has to sit still before the chrome fades.
+/// How long the pointer has to sit still before it is hidden.
 const CHROME_IDLE: std::time::Duration = std::time::Duration::from_millis(2600);
+
+/// How close to an edge the pointer has to be for that edge's chrome to
+/// appear. Generous on purpose — a reveal zone you have to aim for is a
+/// reveal zone people think is broken.
+const LEFT_ZONE: f64 = 130.0;
+const RIGHT_ZONE: f64 = 150.0;
+const TOP_ZONE: f64 = 110.0;
+const BOTTOM_ZONE: f64 = 210.0;
 
 /// Fade a piece of chrome out and stop it taking input. The two go
 /// together: a widget at zero opacity is invisible but still swallows
@@ -618,10 +629,6 @@ fn wire(ui: &Rc<Ui>, t: &TransportWidgets) {
     on!(t.previous, |ui: &Rc<Ui>| ui.step_queue(-1));
     on!(t.next, |ui: &Rc<Ui>| ui.step_queue(1));
     on!(t.fullscreen, |ui: &Rc<Ui>| ui.toggle_fullscreen());
-    on!(t.queue_toggle, |ui: &Rc<Ui>| {
-        ui.queue_wanted.set(!ui.queue_wanted.get());
-        ui.apply_chrome();
-    });
     on!(t.more, |ui: &Rc<Ui>| ui.show_more_menu());
     on!(t.open, |ui: &Rc<Ui>| ui.open_dialog());
     on!(t.browse, |ui: &Rc<Ui>| ui.show_browse("home"));
@@ -723,10 +730,16 @@ fn wire(ui: &Rc<Ui>, t: &TransportWidgets) {
                         other.unselect_all();
                     }
                 }
-                if action == "player" {
-                    ui.show_player();
-                } else {
-                    ui.show_browse(&action);
+                match action.as_str() {
+                    "player" => ui.show_player(),
+                    // A toggle, not a destination: it flips the panel and
+                    // leaves the selection where it was.
+                    "queue" => {
+                        ui.queue_wanted.set(!ui.queue_wanted.get());
+                        ui.apply_chrome();
+                        list.unselect_row(row);
+                    }
+                    place => ui.show_browse(place),
                 }
             }
         });
@@ -740,7 +753,14 @@ fn wire(ui: &Rc<Ui>, t: &TransportWidgets) {
     let motion = gtk::EventControllerMotion::new();
     motion.connect_motion({
         let ui = Rc::clone(ui);
-        move |_, _, _| ui.note_activity()
+        move |_, x, y| ui.pointer_moved(x, y)
+    });
+    motion.connect_leave({
+        let ui = Rc::clone(ui);
+        move |_| {
+            ui.pointer_inside.set(false);
+            ui.apply_chrome();
+        }
     });
     ui.window.add_controller(motion);
 
@@ -893,52 +913,71 @@ impl Ui {
         self.tick_chrome();
     }
 
-    /// Someone is still at the keyboard or the mouse: bring the chrome
-    /// back and restart the idle countdown.
+    /// Someone is still at the keyboard or the mouse.
     fn note_activity(&self) {
         self.last_activity.set(std::time::Instant::now());
-        if !self.chrome_shown.get() {
-            self.chrome_shown.set(true);
+        if !self.cursor_shown.get() {
+            self.cursor_shown.set(true);
             self.apply_chrome();
         }
     }
 
-    /// Fade the chrome away once a film has been playing undisturbed.
-    /// Only while playing: a paused player is one someone is looking at,
-    /// and hiding the controls then just makes them hunt for the mouse.
+    fn pointer_moved(&self, x: f64, y: f64) {
+        self.pointer.set((x, y));
+        self.pointer_inside.set(true);
+        self.note_activity();
+        self.apply_chrome();
+    }
+
+    /// The pointer is the only thing still on a timer: it has no edge to
+    /// belong to, so it goes away when it stops moving over a playing film.
     fn tick_chrome(&self) {
         let playing = self.player.borrow().state() == State::Playing;
         let idle = self.last_activity.get().elapsed() >= CHROME_IDLE;
         let shown = !(playing && idle);
-        if shown != self.chrome_shown.get() {
-            self.chrome_shown.set(shown);
+        if shown != self.cursor_shown.get() {
+            self.cursor_shown.set(shown);
             self.apply_chrome();
         }
     }
 
     fn apply_chrome(&self) {
-        let shown = self.chrome_shown.get();
+        let playing = self.player.borrow().state() == State::Playing;
         let fullscreen = self.fullscreen.get();
-        // Fullscreen means the picture is the whole point. The transport
-        // still comes back when the pointer moves, because that is what it
-        // is for, but the sidebar and the queue are for browsing and stay
-        // out of the way until the window is restored.
-        let browsing = shown && !fullscreen;
-
-        self.sidebar_slot.set_reveal_child(browsing);
-        self.sidebar_slot.set_can_target(browsing);
         let on_player = self.stage_stack.visible_child_name().as_deref() == Some("player");
-        set_away(&self.queue_panel, !(browsing && on_player && self.queue_wanted.get()));
-        // The title says what is playing, which is not what the browser is
-        // about — and left where it was, it sat on top of the folder name.
-        // The window controls live in the same bar and stay either way.
+
+        // Nothing is playing, so nothing is being interrupted: show it all.
+        // Immersion is for when there is something to be immersed in.
+        let (x, y) = self.pointer.get();
+        let inside = self.pointer_inside.get();
+        let width = self.window.width() as f64;
+        let height = self.window.height() as f64;
+
+        let near_left = inside && x <= LEFT_ZONE;
+        let near_bottom = inside && y >= height - BOTTOM_ZONE;
+        let near_top = inside && y <= TOP_ZONE;
+        let near_right = inside && x >= width - RIGHT_ZONE;
+
+        let show_sidebar = !playing || near_left;
+        let show_transport = !playing || near_bottom;
+        let show_title = !playing || near_top;
+        // The queue is the viewer's own choice first; once chosen it
+        // follows the sidebar it is paired with, or its own edge.
+        let show_queue =
+            self.queue_wanted.get() && on_player && (!playing || near_right || near_left);
+
+        // Fullscreen is for the picture. Browsing chrome stays away
+        // whatever the pointer is doing; the transport still answers.
+        self.sidebar_slot.set_reveal_child(show_sidebar && !fullscreen);
+        self.sidebar_slot.set_can_target(show_sidebar && !fullscreen);
+        set_away(&self.queue_panel, !(show_queue && !fullscreen));
+        set_away(&self.transport, !show_transport);
+        set_away(&self.watermark, !show_transport);
+        set_away(&self.top_bar, !show_title);
         self.title_box.set_visible(on_player);
-        set_away(&self.top_bar, !shown);
-        set_away(&self.transport, !shown);
-        set_away(&self.watermark, !shown);
-        // Hide the pointer with the controls, or it sits on the picture as
-        // the one thing that did not fade.
-        self.window.set_cursor_from_name(Some(if shown { "default" } else { "none" }));
+
+        let cursor = self.cursor_shown.get() || !playing;
+        self.window.set_cursor_from_name(Some(if cursor { "default" } else { "none" }));
     }
 
     fn show_subtitle(&self) {
@@ -951,10 +990,7 @@ impl Ui {
         // markup we got wrong would vanish rather than merely lose its
         // styling. Check first and fall back to plain text.
         match gtk::pango::parse_markup(&markup, '\u{0}') {
-            Ok((_, text, _)) => {
-                let _ = text;
-                self.subtitle.set_markup(&markup);
-            }
+            Ok(_) => self.subtitle.set_markup(&markup),
             Err(e) => {
                 log::debug!("subtitle markup rejected ({e}); showing it plain");
                 self.subtitle.set_text(&markup);
@@ -991,7 +1027,8 @@ impl Ui {
             let widget_height = self.stage.widget.height() as f32;
             let below_picture = (widget_height - (y + h)).max(0.0);
             let inset = (below_picture + h * 0.06) as i32;
-            // Never underneath the transport bar.
+            // Never underneath the transport bar, even while it is hidden:
+            // the bar reveals on hover and must not land on the caption.
             self.subtitle.set_margin_bottom(inset.max(TRANSPORT_CLEARANCE));
         }
     }

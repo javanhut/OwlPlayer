@@ -84,6 +84,7 @@ impl Stage {
             let video_rect = Rc::clone(&video_rect);
             // The generation of the subtitle set already on screen.
             let seen = Cell::new(u64::MAX);
+            let accent = crate::theme::accent_rgb();
             move |area, _ctx| {
                 let mut renderer = renderer.borrow_mut();
                 let Some(renderer) = renderer.as_mut() else {
@@ -94,6 +95,19 @@ impl Stage {
                 // nothing new is due and the last frame still stands, which
                 // is the ordinary case on a display refreshing faster than
                 // the video's frame rate.
+                let scale = area.scale_factor();
+                let (width, height) = (area.width() * scale, area.height() * scale);
+
+                // A file with no picture gets the visualiser instead. It is
+                // drawn by the same renderer for the same reason the video
+                // is: it has to keep up with the display, not with GTK.
+                if let Some(levels) = player.borrow().spectrum() {
+                    renderer.clear_frame();
+                    renderer.draw_spectrum(width, height, &levels, accent);
+                    video_rect.set((0.0, 0.0, area.width() as f32, area.height() as f32));
+                    return glib::Propagation::Stop;
+                }
+
                 if let Some(frame) = player.borrow().frame_for_now() {
                     renderer.upload(&frame);
                 }
@@ -124,12 +138,10 @@ impl Stage {
                     }
                 }
 
-                let scale = area.scale_factor();
-                let (w, h) = (area.width() * scale, area.height() * scale);
-                renderer.draw(w, h);
+                renderer.draw(width, height);
                 // Reported in widget pixels, not device pixels, because
                 // that is the space GTK positions the label in.
-                let (rx, ry, rw, rh) = renderer.video_rect(w, h);
+                let (rx, ry, rw, rh) = renderer.video_rect(width, height);
                 let scale = scale as f32;
                 video_rect.set((rx / scale, ry / scale, rw / scale, rh / scale));
                 glib::Propagation::Stop

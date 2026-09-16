@@ -17,6 +17,7 @@ use crate::error::Result;
 use crate::frame::VideoFrame;
 use crate::media::{MediaInfo, TrackKind};
 use crate::subtitle::SubtitleCue;
+use crate::visualizer::{Analyzer, BANDS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
@@ -65,6 +66,9 @@ pub struct Player {
     state: State,
     volume: f64,
     muted: bool,
+    /// Stepped once per frame by whoever is drawing. Behind a `RefCell`
+    /// because the render callback holds the player immutably.
+    analyzer: std::cell::RefCell<Analyzer>,
 }
 
 impl Default for Player {
@@ -78,7 +82,17 @@ impl Player {
         let clock = Clock::new();
         let shared = Shared::new(Arc::clone(&clock));
         let (events_tx, events_rx) = unbounded();
-        Player { clock, shared, session: None, events_tx, events_rx, state: State::Idle, volume: 1.0, muted: false }
+        Player {
+            clock,
+            shared,
+            session: None,
+            events_tx,
+            events_rx,
+            state: State::Idle,
+            volume: 1.0,
+            muted: false,
+            analyzer: std::cell::RefCell::new(Analyzer::default()),
+        }
     }
 
     /// Drain what the engine has said since the last call. The app does
@@ -304,6 +318,16 @@ impl Player {
     /// Which subtitle stream is playing, if any.
     pub fn subtitle_track(&self) -> Option<usize> {
         self.session.as_ref().and_then(|s| s.selection.subtitle)
+    }
+
+    /// Bar heights for the visualiser, stepped one frame. `None` when the
+    /// file has a picture of its own or no audio has reached the device.
+    pub fn spectrum(&self) -> Option<[f32; BANDS]> {
+        let audio_only = self.session.as_ref().is_some_and(|s| s.info.is_audio_only());
+        if !audio_only || !self.shared.visualizer.is_live() {
+            return None;
+        }
+        Some(*self.analyzer.borrow_mut().update(&self.shared.visualizer))
     }
 
     /// The picture to draw right now, or `None` to keep the last one.

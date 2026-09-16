@@ -54,6 +54,18 @@ pub fn backdrop() -> [f32; 3] {
     if dark { [0.090, 0.090, 0.114] } else { [0.949, 0.949, 0.969] }
 }
 
+/// The desktop's accent colour, for the parts of the picture GTK does not
+/// draw — the visualiser is ours, so it has to read the same value the
+/// stylesheet does.
+pub fn accent_rgb() -> [f32; 3] {
+    let appearance = Desktop::load().appearance;
+    let hex = if is_hex(&appearance.accent) { appearance.accent.clone() } else { DEFAULT_ACCENT.into() };
+    let channel = |from: usize| {
+        u8::from_str_radix(&hex[from..from + 2], 16).unwrap_or(0) as f32 / 255.0
+    };
+    [channel(1), channel(3), channel(5)]
+}
+
 /// Whether the desktop asked for translucent windows.
 pub fn glass() -> bool {
     Desktop::load().appearance.transparency

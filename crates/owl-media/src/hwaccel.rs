@@ -63,11 +63,20 @@ pub unsafe fn attach(ctx: *mut ffi::AVCodecContext, codec: *const ffi::AVCodec) 
         return None;
     }
 
-    for &kind in CANDIDATES {
-        let Some(pixel_format) = (unsafe { hw_pixel_format(codec, kind) }) else { continue };
+    // Which device works is a property of the machine, not of the file, so
+    // it is probed once. Without this every open re-walks the render nodes
+    // and libva prints a fresh pair of nouveau failures each time — six
+    // lines of noise per file on a hybrid laptop.
+    let (kind, node) = (*chosen_device())?;
 
-        let Some(device) = (unsafe { open_device(kind) }) else { continue };
-        let mut device = device;
+    let pixel_format = unsafe { hw_pixel_format(codec, kind) }?;
+    {
+        let node = node.map(|n| CString::new(n).ok()).unwrap_or(None);
+        let name = node.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
+        let mut device = std::ptr::null_mut();
+        if unsafe { ffi::av_hwdevice_ctx_create(&mut device, kind, name, std::ptr::null_mut(), 0) } < 0 {
+            return None;
+        }
 
         unsafe {
             (*ctx).hw_device_ctx = ffi::av_buffer_ref(device);
@@ -80,12 +89,56 @@ pub unsafe fn attach(ctx: *mut ffi::AVCodecContext, codec: *const ffi::AVCodec) 
         }
 
         let accel = HwAccel { kind, pixel_format };
-        log::info!("hardware decoding via {}", accel.name());
+        log::debug!("hardware decoding via {}", accel.name());
         return Some(accel);
     }
+}
 
-    log::info!("no hardware decoder available, using the CPU");
-    None
+/// The first hardware device on this machine that actually opens, probed
+/// once per process. `None` means decode on the CPU.
+fn chosen_device() -> &'static Option<(ffi::AVHWDeviceType, Option<&'static str>)> {
+    static CHOICE: std::sync::OnceLock<Option<(ffi::AVHWDeviceType, Option<&'static str>)>> =
+        std::sync::OnceLock::new();
+    CHOICE.get_or_init(|| {
+        // libva writes its own failures straight to stderr, below FFmpeg's
+        // log level, so the only way to quiet a node that cannot init is to
+        // ask libva not to talk. Left alone if the user set it, so
+        // LIBVA_MESSAGING_LEVEL=2 still works for debugging.
+        if std::env::var_os("LIBVA_MESSAGING_LEVEL").is_none() {
+            // Safety: called inside a OnceLock initialiser, before any
+            // decode thread exists.
+            unsafe { std::env::set_var("LIBVA_MESSAGING_LEVEL", "0") };
+        }
+
+        // Probing is allowed to fail — that is what probing is — so FFmpeg
+        // is asked not to narrate it. libva's own complaints arrive through
+        // this logger too, which is why LIBVA_MESSAGING_LEVEL alone does
+        // not quiet them.
+        let previous = unsafe { ffi::av_log_get_level() };
+        unsafe { ffi::av_log_set_level(ffi::AV_LOG_QUIET) };
+        let found = probe();
+        unsafe { ffi::av_log_set_level(previous) };
+        found
+    })
+}
+
+fn probe() -> Option<(ffi::AVHWDeviceType, Option<&'static str>)> {
+    {
+        for &kind in CANDIDATES {
+            if let Some((device, node)) = unsafe { open_device(kind) } {
+                let mut device = device;
+                unsafe { ffi::av_buffer_unref(&mut device) };
+                let accel = HwAccel { kind, pixel_format: ffi::AVPixelFormat::AV_PIX_FMT_NONE };
+                match node {
+                    Some(node) => log::info!("hardware decoding via {} on {node}", accel.name()),
+                    None => log::info!("hardware decoding via {}", accel.name()),
+                }
+                return Some((kind, node));
+            }
+        }
+        log::info!("no hardware decoder available, using the CPU");
+        None
+    }
 }
 
 /// Open a hardware device, trying each DRM render node in turn for the
@@ -96,13 +149,15 @@ pub unsafe fn attach(ctx: *mut ffi::AVCodecContext, codec: *const ffi::AVCodec) 
 /// open NVIDIA driver cannot decode video at all. Asking for each node by
 /// name is the difference between "no hardware decoding on this laptop"
 /// and using the integrated GPU that can actually do it.
-unsafe fn open_device(kind: ffi::AVHWDeviceType) -> Option<*mut ffi::AVBufferRef> {
+unsafe fn open_device(
+    kind: ffi::AVHWDeviceType,
+) -> Option<(*mut ffi::AVBufferRef, Option<&'static str>)> {
     let uses_drm_node = matches!(
         kind,
         ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI | ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_DRM
     );
 
-    let mut candidates: Vec<Option<CString>> = vec![None];
+    let mut candidates: Vec<Option<CString>> = Vec::new();
     if uses_drm_node {
         let mut nodes: Vec<_> = std::fs::read_dir("/dev/dri")
             .into_iter()
@@ -114,16 +169,22 @@ unsafe fn open_device(kind: ffi::AVHWDeviceType) -> Option<*mut ffi::AVBufferRef
         nodes.sort();
         candidates.extend(nodes.into_iter().filter_map(|p| CString::new(p.to_string_lossy().as_bytes()).ok()).map(Some));
     }
+    // Only fall back to the unnamed default when there are no nodes to
+    // name — otherwise it is one of them again, and fails again.
+    if candidates.is_empty() {
+        candidates.push(None);
+    }
 
     for candidate in candidates {
         let mut device = std::ptr::null_mut();
         let name = candidate.as_ref().map_or(std::ptr::null(), |c| c.as_ptr());
         let err = unsafe { ffi::av_hwdevice_ctx_create(&mut device, kind, name, std::ptr::null_mut(), 0) };
         if err >= 0 {
-            if let Some(c) = &candidate {
-                log::debug!("{kind:?} opened on {}", c.to_string_lossy());
-            }
-            return Some(device);
+            // Leaked deliberately: the chosen node is cached for the life
+            // of the process, so it has to outlive this call.
+            let node = candidate
+                .map(|c| &*Box::leak(c.to_string_lossy().into_owned().into_boxed_str()));
+            return Some((device, node));
         }
     }
     None

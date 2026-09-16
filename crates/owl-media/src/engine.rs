@@ -48,6 +48,10 @@ pub struct Shared {
     /// rather than "after the ring drains". Shared as its own `Arc` because
     /// the realtime thread must not hold a reference to the whole engine.
     pub paused: Arc<AtomicBool>,
+    /// Samples on their way to the sound card, for the visualiser. Shared
+    /// as its own `Arc` for the same reason as `paused`: the realtime
+    /// thread must not hold a reference to the whole engine.
+    pub visualizer: Arc<crate::visualizer::Tap>,
     pub generation: AtomicU64,
     /// Where the last seek was aiming, as f64 bits.
     ///
@@ -86,6 +90,7 @@ impl Shared {
             clock,
             stop: AtomicBool::new(false),
             paused: Arc::new(AtomicBool::new(true)),
+            visualizer: Arc::new(crate::visualizer::Tap::default()),
             generation: AtomicU64::new(0),
             seek_target: AtomicU64::new(0.0f64.to_bits()),
             volume: AtomicU64::new(1.0f64.to_bits()),
@@ -674,7 +679,11 @@ fn audio_loop(
     shared: Arc<Shared>,
     events: Sender<Event>,
 ) {
-    let sink = match Sink::open(Arc::clone(&shared.clock), Arc::clone(&shared.paused)) {
+    let sink = match Sink::open(
+        Arc::clone(&shared.clock),
+        Arc::clone(&shared.paused),
+        Arc::clone(&shared.visualizer),
+    ) {
         Ok(s) => s,
         Err(e) => {
             // No sound card is not fatal: the file still plays, on the

@@ -89,6 +89,13 @@ pub struct MediaInfo {
 }
 
 impl MediaInfo {
+    /// True when there is nothing to show — a music file, or one whose
+    /// only video stream is cover art, which `probe` already discards.
+    pub fn is_audio_only(&self) -> bool {
+        self.tracks_of(TrackKind::Video).next().is_none()
+            && self.tracks_of(TrackKind::Audio).next().is_some()
+    }
+
     pub fn tracks_of(&self, kind: TrackKind) -> impl Iterator<Item = &Track> {
         self.tracks.iter().filter(move |t| t.kind == kind)
     }

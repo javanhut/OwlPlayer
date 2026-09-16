@@ -26,6 +26,7 @@ pub mod frame;
 pub mod media;
 pub mod ring;
 pub mod subtitle;
+pub mod visualizer;
 
 mod audio;
 mod engine;
@@ -37,6 +38,7 @@ pub use error::{Error, Result};
 pub use frame::{ColorInfo, PixelLayout, PlaneRef, VideoFrame};
 pub use hwaccel::HwAccel;
 pub use media::{Chapter, MediaInfo, Track, TrackKind, probe};
+pub use visualizer::{Analyzer, BANDS, Tap};
 pub use subtitle::{Alignment, BitmapRect, SubtitleContent, SubtitleCue};
 pub use engine::Selection;
 pub use player::{Event, Player, State, TrackPreference};

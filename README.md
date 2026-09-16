@@ -76,6 +76,21 @@ and falls back to the CPU rather than failing to open. On a hybrid machine
 each DRM render node is tried by name, because the default is routinely the
 discrete card, which on the open NVIDIA driver cannot decode at all.
 
+**Music gets a visualiser.** A file with no picture — or whose only video
+stream is cover art — draws a spectrum instead of a black rectangle. The
+samples are tapped in the audio callback, so the bars move with what is
+actually audible rather than with what has merely been decoded, and the
+analysis happens on the GL thread where being late costs nothing.
+
+Bands are spaced logarithmically, because pitch is: linear bins would
+spend most of the display on the top two octaves, where music has almost
+nothing, and crush the bass into one bar. Levels are in decibels over a
+60 dB range for the same reason — a linear bar makes everything except
+the kick drum invisible. Attack is fast and decay slow, the way a meter
+behaves. The transform is normalised against full scale, without which
+every bar pins to the ceiling while still moving convincingly enough to
+look correct.
+
 **Finding something to play** is the browser, not just a file dialog. The
 sidebar navigates: Library and Local Files open your home folder, Movies
 and TV Shows open Videos, Music Videos opens Music. Rows that are not
@@ -97,11 +112,19 @@ PipeWire and Pulse first, and tried until one accepts a stream. ALSA's
 discards every sample, so a "first device that works" fallback lands on it
 and plays silence with nothing in the log to explain why.
 
-**The chrome gets out of the way.** Everything fades after a few seconds
-of an undisturbed film and comes back on the first movement of the mouse.
-The sidebar is in a Revealer rather than merely faded, so the picture
-takes its width. In fullscreen the sidebar and queue stay away entirely;
-only the transport returns.
+**The chrome gets out of the way.** While a film is playing every piece of
+it belongs to an edge and appears when the pointer goes near that edge:
+left for the sidebar, bottom for the transport, top for the title and the
+window controls, right for the queue. Nothing is on a timer, which makes
+it predictable in a way a timeout is not — the one exception is the
+pointer itself, which has no edge to belong to and so is hidden once it
+stops moving.
+
+When nothing is playing, everything is simply shown: immersion is for
+when there is something to be immersed in. The sidebar is in a Revealer
+rather than merely faded, so the picture takes its width rather than
+leaving a dead column. In fullscreen the sidebar and queue stay away
+whatever the pointer does; only the transport answers.
 
 ## Building
 

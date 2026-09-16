@@ -58,7 +58,11 @@ impl Sink {
     /// the obvious call is the one that always fails. The device that
     /// works is the one PipeWire itself publishes, and it has to be found
     /// by asking.
-    pub fn open(clock: Arc<Clock>, paused: Arc<std::sync::atomic::AtomicBool>) -> Result<Sink> {
+    pub fn open(
+        clock: Arc<Clock>,
+        paused: Arc<std::sync::atomic::AtomicBool>,
+        tap: Arc<crate::visualizer::Tap>,
+    ) -> Result<Sink> {
         let host = cpal::default_host();
         let mut candidates: Vec<(u32, String, cpal::Device)> = Vec::new();
         if let Ok(devices) = host.output_devices() {
@@ -80,7 +84,7 @@ impl Sink {
 
         let mut last = None;
         for (_, name, device) in candidates {
-            match Sink::try_device(&device, &clock, &paused) {
+            match Sink::try_device(&device, &clock, &paused, &tap) {
                 Ok(sink) => {
                     log::info!("audio out: {name}");
                     return Ok(sink);
@@ -101,9 +105,11 @@ impl Sink {
         device: &cpal::Device,
         clock: &Arc<Clock>,
         paused: &Arc<std::sync::atomic::AtomicBool>,
+        tap: &Arc<crate::visualizer::Tap>,
     ) -> Result<Sink> {
         let clock = Arc::clone(clock);
         let paused = Arc::clone(paused);
+        let tap = Arc::clone(tap);
         let supported = device.default_output_config().map_err(|e| Error::AudioStream(e.to_string()))?;
         let sample_format = supported.sample_format();
         let config: cpal::StreamConfig = supported.into();
@@ -130,6 +136,7 @@ impl Sink {
             ($t:ty, $convert:expr) => {{
                 let mut scratch: Vec<f32> = Vec::new();
                 let paused = Arc::clone(&paused);
+                let tap = Arc::clone(&tap);
                 device.build_output_stream(
                     config.clone(),
                     move |out: &mut [$t], _: &cpal::OutputCallbackInfo| {
@@ -149,6 +156,10 @@ impl Sink {
                         }
                         let buf = &mut scratch[..out.len()];
                         s.ring.pop_into(buf);
+                        // Tapped here rather than at the decoder: this is
+                        // what is actually about to be heard, so the bars
+                        // move with the sound and not ahead of it.
+                        tap.push(buf, s.channels);
                         for (o, &f) in out.iter_mut().zip(buf.iter()) {
                             *o = $convert(f);
                         }

@@ -16,6 +16,8 @@ pub use colour::{primaries_matrix, yuv_to_rgb};
 
 const VERTEX_SRC: &str = include_str!("shaders/video.vert");
 const FRAGMENT_SRC: &str = include_str!("shaders/video.frag");
+const SPECTRUM_VERTEX_SRC: &str = include_str!("shaders/spectrum.vert");
+const SPECTRUM_FRAGMENT_SRC: &str = include_str!("shaders/spectrum.frag");
 const OVERLAY_VERTEX_SRC: &str = include_str!("shaders/overlay.vert");
 const OVERLAY_FRAGMENT_SRC: &str = include_str!("shaders/overlay.frag");
 
@@ -92,6 +94,12 @@ struct SubtitleImage {
 
 pub struct Renderer {
     program: u32,
+    spectrum_program: u32,
+    spectrum_texture: u32,
+    spectrum_accent: i32,
+    spectrum_bands: i32,
+    spectrum_sampler: i32,
+    spectrum_len: usize,
     overlay_program: u32,
     overlay_rect: i32,
     overlay_image: i32,
@@ -135,6 +143,14 @@ impl Renderer {
         unsafe {
             let program = build_program(VERTEX_SRC, FRAGMENT_SRC)?;
             let overlay_program = build_program(OVERLAY_VERTEX_SRC, OVERLAY_FRAGMENT_SRC)?;
+            let spectrum_program = build_program(SPECTRUM_VERTEX_SRC, SPECTRUM_FRAGMENT_SRC)?;
+            let mut spectrum_texture = 0;
+            gl::GenTextures(1, &mut spectrum_texture);
+            gl::BindTexture(gl::TEXTURE_2D, spectrum_texture);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
             let mut vao = 0;
             // Core profile forbids drawing with no VAO bound, even when the
             // vertices come from gl_VertexID and nothing is attached to it.
@@ -180,8 +196,19 @@ impl Renderer {
                 gl::GetUniformLocation(overlay_program, c.as_ptr())
             };
 
+            let su = |name: &str| {
+                let c = CString::new(name).unwrap();
+                gl::GetUniformLocation(spectrum_program, c.as_ptr())
+            };
+
             Ok(Renderer {
                 program,
+                spectrum_program,
+                spectrum_texture,
+                spectrum_accent: su("uAccent"),
+                spectrum_bands: su("uBands"),
+                spectrum_sampler: su("uSpectrum"),
+                spectrum_len: 0,
                 overlay_program,
                 overlay_rect,
                 overlay_image,
@@ -307,6 +334,72 @@ impl Renderer {
                 gl::Uniform1i(loc, i as i32);
             }
         }
+    }
+
+    /// Draw the music visualiser: bar heights in 0..=1, left to right.
+    ///
+    /// Used when the file has no picture. A black rectangle is a poor
+    /// answer to a music file, and this is the one thing the renderer can
+    /// show that is actually about the sound.
+    pub fn draw_spectrum(&mut self, width: i32, height: i32, levels: &[f32], accent: [f32; 3]) {
+        if width <= 0 || height <= 0 || levels.is_empty() {
+            return;
+        }
+        unsafe {
+            gl::BindTexture(gl::TEXTURE_2D, self.spectrum_texture);
+            gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
+            gl::PixelStorei(gl::UNPACK_ROW_LENGTH, 0);
+            if self.spectrum_len != levels.len() {
+                gl::TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    gl::R32F as i32,
+                    levels.len() as i32,
+                    1,
+                    0,
+                    gl::RED,
+                    gl::FLOAT,
+                    levels.as_ptr() as *const _,
+                );
+                self.spectrum_len = levels.len();
+            } else {
+                gl::TexSubImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    0,
+                    0,
+                    levels.len() as i32,
+                    1,
+                    gl::RED,
+                    gl::FLOAT,
+                    levels.as_ptr() as *const _,
+                );
+            }
+
+            let [r, g, b] = self.backdrop;
+            gl::Viewport(0, 0, width, height);
+            gl::ClearColor(r, g, b, 1.0);
+            gl::Clear(gl::COLOR_BUFFER_BIT);
+
+            gl::Enable(gl::BLEND);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+            gl::UseProgram(self.spectrum_program);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, self.spectrum_texture);
+            gl::Uniform1i(self.spectrum_sampler, 0);
+            gl::Uniform1f(self.spectrum_bands, levels.len() as f32);
+            gl::Uniform3f(self.spectrum_accent, accent[0], accent[1], accent[2]);
+            gl::BindVertexArray(self.vao);
+            gl::DrawArrays(gl::TRIANGLES, 0, 3);
+            gl::BindVertexArray(0);
+            gl::Disable(gl::BLEND);
+        }
+    }
+
+    /// Forget the current picture, so switching from a film to a music
+    /// file does not leave the last frame behind the bars.
+    pub fn clear_frame(&mut self) {
+        self.have_frame = false;
     }
 
     /// Replace the bitmap subtitles on screen.
@@ -466,6 +559,8 @@ impl Drop for Renderer {
             gl::DeleteVertexArrays(1, &self.vao);
             gl::DeleteProgram(self.program);
             gl::DeleteProgram(self.overlay_program);
+            gl::DeleteProgram(self.spectrum_program);
+            gl::DeleteTextures(1, &self.spectrum_texture);
         }
     }
 }
