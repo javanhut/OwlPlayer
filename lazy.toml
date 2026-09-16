@@ -1,0 +1,82 @@
+# ImLazy configuration file
+#
+# Mirrors the Makefile; keep the two in step. Every other Raven app carries
+# both, so either `make` or `imlazy` works whichever you reach for first.
+
+[settings]
+default = "build"
+
+[variables]
+app_id = "com.owlplayer.Raven"
+binary = "owl-player"
+prefix = "/usr/local"
+bindir = "{{prefix}}/bin"
+datadir = "{{prefix}}/share"
+icondir = "{{datadir}}/icons/hicolor/scalable/apps"
+target = "target/release/{{binary}}"
+
+[commands]
+
+[commands.build]
+desc = "Build release binary"
+alias = ["b"]
+run = ["cargo build --locked --release"]
+
+[commands.run]
+desc = "Build and run (pass a file with: imlazy run -- FILE)"
+alias = ["r", "dev", "d"]
+run = ["cargo run -p owl-player --"]
+
+[commands.smoke]
+desc = "Headless engine check — demux, decode, seek, shut down. No window, no GL (imlazy smoke -- FILE)"
+run = ["cargo run -p owl-media --example smoke --"]
+
+[commands.audio]
+desc = "List the audio devices cpal can see and which of them accept a stream"
+run = ["cargo run -p owl-media --example audio-probe"]
+
+[commands.test]
+desc = "Run all tests"
+alias = ["t"]
+run = ["cargo test --locked"]
+
+[commands.check]
+desc = "Run formatting, Clippy, and the test suite"
+run = [
+  "cargo fmt --check",
+  "cargo clippy --locked --all-targets -- -D warnings",
+  "cargo test --locked",
+]
+
+[commands.install]
+desc = "Install owl-player, its desktop entry and file associations"
+dep = ["build"]
+escalate = true
+writes = ["{{bindir}}", "{{datadir}}", "{{icondir}}"]
+run = [
+  "install -Dm755 {{target}} {{bindir}}/{{binary}}",
+  "install -Dm644 data/{{app_id}}.desktop {{datadir}}/applications/{{app_id}}.desktop",
+  "install -Dm644 data/{{app_id}}.metainfo.xml {{datadir}}/metainfo/{{app_id}}.metainfo.xml",
+  "install -Dm644 data/icons/hicolor/scalable/apps/{{app_id}}.svg {{icondir}}/{{app_id}}.svg",
+  "sh -c 'command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q {{datadir}}/applications || true'",
+  "sh -c 'command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -qtf {{datadir}}/icons/hicolor || true'",
+]
+
+[commands.set-default]
+desc = "Make Owl Player the default for the media types it handles (current user)"
+run = ["{{bindir}}/{{binary}} set-default"]
+
+[commands.uninstall]
+desc = "Remove owl-player"
+escalate = true
+writes = ["{{bindir}}", "{{datadir}}", "{{icondir}}"]
+run = [
+  "rm -f {{bindir}}/{{binary}}",
+  "rm -f {{datadir}}/applications/{{app_id}}.desktop",
+  "rm -f {{datadir}}/metainfo/{{app_id}}.metainfo.xml",
+  "rm -f {{icondir}}/{{app_id}}.svg",
+]
+
+[commands.clean]
+desc = "Clean build artifacts"
+run = ["cargo clean"]

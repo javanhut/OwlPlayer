@@ -120,6 +120,15 @@ tells libclang where its own builtin headers live. A later system-wide
     make test
     sudo make install
 
+`lazy.toml` mirrors the Makefile, as in every other Raven app, so imlazy
+works just as well — keep the two in step:
+
+    imlazy build
+    imlazy run -- some.mkv
+    imlazy smoke -- some.mkv
+    imlazy audio               # which output devices cpal can actually open
+    imlazy test
+
 ## Keys
 
     Space, K   play or pause      F, F11  fullscreen

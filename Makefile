@@ -1,4 +1,5 @@
 # Owl Player. `make`, `make run FILE=...`, `sudo make install`.
+# lazy.toml mirrors these for imlazy; keep the two in step.
 APP_ID    := com.owlplayer.Raven
 BIN_NAME  := owl-player
 PREFIX    ?= /usr/local
