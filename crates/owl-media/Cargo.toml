@@ -1,0 +1,24 @@
+[package]
+name = "owl-media"
+description = "OwlPlayer's playback engine: demux, decode, resample and the A/V clock."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ffmpeg-next.workspace = true
+thiserror.workspace = true
+crossbeam-channel.workspace = true
+parking_lot.workspace = true
+log.workspace = true
+
+# The sound card. cpal talks to PipeWire through its ALSA compatibility
+# layer on Raven, which is what the desktop already routes everything
+# else through.
+cpal = "0.18"
+
+[dev-dependencies]
+anyhow.workspace = true
+env_logger.workspace = true

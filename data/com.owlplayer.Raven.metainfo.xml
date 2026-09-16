@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.owlplayer.Raven</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Owl Player</name>
+  <summary>See more — play anything, beautifully</summary>
+  <description>
+    <p>
+      Owl Player plays what you have. It is built directly on the FFmpeg
+      libraries — libavformat, libavcodec, libswscale and libswresample —
+      so the list of things it opens is the list of things FFmpeg opens,
+      and it decodes on the GPU wherever the hardware allows.
+    </p>
+    <p>
+      The picture is drawn by Owl Player's own renderer: decoded frames go
+      straight from the decoder into GL textures, and colour conversion,
+      10- and 12-bit formats and HDR tone mapping all happen on the GPU.
+      Nothing touches the CPU between the decoder and the screen.
+    </p>
+    <p>
+      It wears Raven Glass, the look shared with Raven Settings, Store,
+      Viewer and Power, and follows the accent colour you set for the
+      desktop.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.owlplayer.Raven.desktop</launchable>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Player</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-09-16">
+      <description><p>First release.</p></description>
+    </release>
+  </releases>
+</component>

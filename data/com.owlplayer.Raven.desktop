@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Owl Player
+GenericName=Media Player
+Comment=See more — play anything, beautifully
+Exec=owl-player %U
+Icon=com.owlplayer.Raven
+Terminal=false
+Categories=AudioVideo;Player;Video;GTK;
+Keywords=Video;Movie;Film;Audio;Music;Player;DVD;Subtitles;
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/mpeg;video/x-ms-wmv;video/x-flv;video/3gpp;video/ogg;video/x-ogm+ogg;video/mp2t;video/x-theora+ogg;video/dv;video/x-m4v;application/x-matroska;audio/mpeg;audio/flac;audio/x-vorbis+ogg;audio/ogg;audio/opus;audio/x-wav;audio/mp4;audio/aac;audio/x-aiff;audio/x-ms-wma;audio/x-musepack;audio/x-ape;audio/x-wavpack;
+StartupNotify=true
+StartupWMClass=owl-player
+SingleMainWindow=true

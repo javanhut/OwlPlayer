@@ -1,0 +1,20 @@
+[package]
+name = "owl-render"
+description = "OwlPlayer's video plane: GL textures, colour conversion and tone mapping."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+owl-media = { path = "../owl-media" }
+ffmpeg-next.workspace = true
+log.workspace = true
+
+# GTK hands us a GL context; the entry points inside it are resolved
+# through eglGetProcAddress (see `load_gl`) and given Rust signatures by
+# the `gl` crate. The `epoxy` crate is deliberately not used: it pulls
+# `gl_generator`, which pins a yanked `xml-rs`.
+gl = "0.14"
+libloading = "0.8"

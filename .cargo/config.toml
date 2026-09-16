@@ -1,0 +1,18 @@
+# lld links several times faster than GNU ld, which is most of an
+# incremental rebuild's wall time. Same choice as RavenViewer.
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# ffmpeg-sys-next runs bindgen over the FFmpeg headers, and bindgen needs
+# libclang.so at build time. Raven ships llvm-libs but not clang, so it
+# lives in the per-user rvn prefix:
+#
+#     rvn --user -i clang
+#
+# Neither is forced: a later system-wide `rvn -i clang` wins, and a stale
+# path here is harmless because clang-sys falls back to its own search.
+[env]
+LIBCLANG_PATH = { value = "/home/javanstorm/.local/share/rvn/root/usr/lib", force = false }
+# libclang loaded from a non-standard prefix does not find its own builtin
+# headers (limits.h, stddef.h), so point it at the resource dir by hand.
+BINDGEN_EXTRA_CLANG_ARGS = { value = "-isystem /home/javanstorm/.local/share/rvn/root/usr/lib/clang/22/include", force = false }

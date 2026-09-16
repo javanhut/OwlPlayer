@@ -1,0 +1,380 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   OwlPlayer — the classes only the player draws. Raven Glass (the shared
+   417-line stylesheet) is loaded first and owns the material, the radius
+   scale and the accent; everything here is the player's own furniture.
+
+   The player breaks one Raven habit on purpose: its surfaces float over
+   moving video rather than over a flat window, so the glass here is
+   darker and the hairlines a touch brighter than in Settings or Store.
+   Video is the brightest thing on screen and chrome has to survive a
+   cut to a white frame without vanishing.
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── Window ──────────────────────────────────────────────────────────── */
+/* No headerbar: the mockup puts the window controls straight on the video,
+   so the whole window is one surface and the video runs under the chrome.
+   The window surface itself is Raven Glass's — `window.raven` and
+   `window.raven.glass` in the shared sheet — and is deliberately not
+   restated here. An opaque colour at this level is what stops a
+   translucent window being translucent, however carefully every panel
+   inside it is given an alpha. */
+window.owl headerbar.owl-headerbar {
+  background-color: transparent;
+  border-bottom: none;
+  box-shadow: none;
+  min-height: 0;
+  padding: 0;
+}
+window.owl windowcontrols button {
+  min-height: 26px; min-width: 26px;
+  border-radius: 999px;
+  background-color: transparent;
+  border: none; box-shadow: none;
+  color: alpha(#ffffff, 0.72);
+}
+window.owl windowcontrols button:hover { background-color: alpha(#ffffff, 0.12); color: #ffffff; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────── */
+/* Raven's own colour, at a slightly higher alpha than Settings uses: this
+   sidebar has bright video beside it rather than a flat window, and has to
+   hold its edge when the picture cuts to white. The colour itself is
+   `@sidebar_bg_color`, not a darker one invented here, so the player reads
+   as the same material as the rest of the desktop. */
+.owl-sidebar {
+  background-color: alpha(@sidebar_bg_color, 0.72);
+  border-right: 1px solid alpha(#ffffff, 0.07);
+  padding: 0;
+}
+/* With desktop transparency off the same surface has to be solid, or the
+   sidebar shows whatever is behind the window straight through it. */
+window.owl:not(.glass) .owl-sidebar { background-color: @sidebar_bg_color; }
+.owl-sidebar-scroll { padding: 0 12px; }
+
+.owl-brand { padding: 18px 14px 20px 14px; }
+.owl-brand .owl-mark { -gtk-icon-size: 42px; }
+.owl-brand .owl-wordmark {
+  font-size: 21px; font-weight: 700; letter-spacing: -0.4px;
+  color: #ffffff;
+}
+.owl-brand .owl-tagline {
+  font-size: 12px; font-weight: 500; letter-spacing: 0.1px;
+  color: alpha(@window_fg_color, 0.55);
+}
+
+/* Nav rows. Raven's navigation-sidebar fills the selected row with flat
+   accent; over video that reads as a solid blue slab, so the player uses
+   a translucent accent wash with a hairline and a soft bloom instead. */
+.owl-nav { background: transparent; padding: 0; }
+.owl-nav row {
+  border-radius: 10px;
+  padding: 7px 12px;
+  margin: 2px 0;
+  min-height: 38px;
+  transition: background-color 120ms ease-out;
+}
+.owl-nav row image { -gtk-icon-size: 17px; color: alpha(@window_fg_color, 0.72); }
+.owl-nav row label { font-size: 14.5px; font-weight: 500; color: alpha(@window_fg_color, 0.86); }
+.owl-nav row:hover { background-color: alpha(#ffffff, 0.06); }
+.owl-nav row:hover image, .owl-nav row:hover label { color: @window_fg_color; }
+.owl-nav row:selected {
+  background-image: linear-gradient(to right,
+    alpha(@accent_bg_color, 0.34), alpha(@accent_bg_color, 0.12));
+  border: 1px solid alpha(@accent_bg_color, 0.42);
+  box-shadow: 0 2px 12px alpha(@accent_bg_color, 0.22),
+              inset 0 1px 0 alpha(#ffffff, 0.10);
+  padding: 6px 11px;
+}
+.owl-nav row:selected image { color: #ffffff; }
+.owl-nav row:selected label { color: #ffffff; font-weight: 600; }
+
+.owl-section {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.1px;
+  color: alpha(@window_fg_color, 0.42);
+  padding: 20px 12px 6px 12px;
+}
+
+.owl-sidebar-footer { padding: 16px 14px 18px 14px; }
+.owl-sidebar-footer .owl-blurb {
+  font-size: 13px; font-weight: 500; line-height: 1.35;
+  color: alpha(@window_fg_color, 0.62);
+}
+.owl-rule { min-height: 2px; min-width: 26px; border-radius: 999px; background-color: @accent_bg_color; }
+
+/* ── Now-playing title, over the video ───────────────────────────────── */
+.owl-stage-title {
+  font-size: 19px; font-weight: 600; letter-spacing: -0.2px;
+  color: #ffffff;
+  text-shadow: 0 1px 8px alpha(#000000, 0.65);
+}
+/* Format chips: 4K HDR · Dolby Vision · Dolby Atmos. Deliberately NOT the
+   accent — they state a fact about the file, they are not an action. */
+.owl-chip {
+  background-color: alpha(#ffffff, 0.10);
+  border: 1px solid alpha(#ffffff, 0.16);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.3px;
+  color: alpha(#ffffff, 0.88);
+}
+.owl-chip.hdr { border-color: alpha(@accent_bg_color, 0.45); color: #ffffff; }
+
+/* ── Queue / Chapters / Details panel ────────────────────────────────── */
+/* Raven's floating-surface idiom — the one its popovers use: a lifted
+   colour, a 1px white hairline, a catch-light along the top edge and a
+   deep shadow. `@dialog_bg_color` rather than the lighter
+   `@popover_bg_color` because this one floats over moving video. */
+.owl-panel {
+  background-color: alpha(@dialog_bg_color, 0.82);
+  border: 1px solid alpha(#ffffff, 0.10);
+  border-radius: 14px;
+  box-shadow: 0 18px 48px alpha(#000000, 0.50),
+              inset 0 1px 0 alpha(#ffffff, 0.07);
+}
+window.owl:not(.glass) .owl-panel { background-color: @dialog_bg_color; }
+.owl-tabs { padding: 4px 6px 0 6px; border-bottom: 1px solid alpha(#ffffff, 0.08); }
+.owl-tabs button {
+  background: transparent; border: none; box-shadow: none;
+  border-radius: 0;
+  padding: 10px 14px;
+  min-height: 34px;
+  font-size: 13.5px; font-weight: 600;
+  color: alpha(@window_fg_color, 0.58);
+}
+.owl-tabs button:hover { color: @window_fg_color; background: transparent; }
+.owl-tabs button:checked {
+  color: #ffffff;
+  background: transparent;
+  box-shadow: inset 0 -2px 0 @accent_bg_color;
+}
+
+.owl-queue { background: transparent; padding: 6px; }
+.owl-queue row {
+  border-radius: 10px;
+  padding: 7px 8px;
+  margin: 1px 0;
+  transition: background-color 120ms ease-out;
+}
+.owl-queue row:hover { background-color: alpha(#ffffff, 0.06); }
+.owl-queue row:selected {
+  background-color: alpha(@accent_bg_color, 0.16);
+  box-shadow: inset 0 0 0 1px alpha(@accent_bg_color, 0.34);
+}
+.owl-queue .owl-thumb {
+  border-radius: 8px;
+  background-color: alpha(#000000, 0.45);
+  box-shadow: inset 0 0 0 1px alpha(#ffffff, 0.10);
+}
+.owl-queue .owl-item-title { font-size: 13.5px; font-weight: 600; color: @window_fg_color; }
+.owl-queue .owl-item-time {
+  font-size: 12px; font-feature-settings: "tnum";
+  color: alpha(@window_fg_color, 0.55);
+}
+.owl-queue row:selected .owl-item-title { color: #ffffff; }
+.owl-queue .owl-now-mark { color: @accent_bg_color; -gtk-icon-size: 15px; }
+
+.owl-panel-foot {
+  padding: 10px 14px;
+  border-top: 1px solid alpha(#ffffff, 0.08);
+}
+.owl-panel-foot label {
+  font-size: 12px; font-feature-settings: "tnum";
+  color: alpha(@window_fg_color, 0.55);
+}
+.owl-panel-foot button {
+  background: transparent; border: none; box-shadow: none;
+  min-width: 26px; min-height: 26px; padding: 0;
+  border-radius: 6px;
+  color: alpha(@window_fg_color, 0.62);
+}
+.owl-panel-foot button:hover { background-color: alpha(#ffffff, 0.10); color: @window_fg_color; }
+
+/* ── Transport ───────────────────────────────────────────────────────── */
+/* A scrim, not a bar: it has to make the controls legible over any frame
+   without drawing a hard edge across the picture. Raven's window colour,
+   faded in from nothing. */
+.owl-transport {
+  background-image: linear-gradient(to bottom,
+    alpha(@window_bg_color, 0.00), alpha(@window_bg_color, 0.74) 38%, alpha(@window_bg_color, 0.92));
+  padding: 14px 22px 16px 22px;
+}
+.owl-time {
+  font-size: 12.5px; font-weight: 600; font-feature-settings: "tnum";
+  color: alpha(@window_fg_color, 0.72);
+}
+
+/* The scrubber. Thinner trough and a smaller knob than the Raven default
+   scale: it spans the whole window and a 20px knob looks like a handle. */
+.owl-scrubber { min-height: 16px; }
+.owl-scrubber trough {
+  min-height: 4px;
+  border-radius: 999px;
+  background-color: alpha(#ffffff, 0.18);
+  box-shadow: none;
+}
+.owl-scrubber highlight { border-radius: 999px; background-color: @accent_bg_color; }
+.owl-scrubber slider {
+  min-height: 13px; min-width: 13px;
+  margin: -5px;
+  border-radius: 999px;
+  background-color: #ffffff;
+  box-shadow: 0 1px 5px alpha(#000000, 0.55);
+}
+/* Buffered-ahead, drawn under the highlight. */
+.owl-scrubber fill { border-radius: 999px; background-color: alpha(#ffffff, 0.28); }
+
+.owl-tbtn {
+  background: transparent; border: none; box-shadow: none;
+  min-width: 34px; min-height: 34px; padding: 0;
+  border-radius: 8px;
+  color: alpha(@window_fg_color, 0.80);
+}
+.owl-tbtn image { -gtk-icon-size: 19px; }
+.owl-tbtn:hover { background-color: alpha(#ffffff, 0.10); color: #ffffff; }
+.owl-tbtn:checked { background-color: alpha(#ffffff, 0.14); color: #ffffff; }
+.owl-tbtn.skip image { -gtk-icon-size: 17px; }
+
+/* The one hero control. A ring, not a filled pill: over video a solid
+   accent disc is a hole punched in the picture, a ring reads as glass. */
+.owl-play {
+  min-width: 58px; min-height: 58px;
+  padding: 0;
+  border-radius: 999px;
+  background-color: alpha(#ffffff, 0.10);
+  border: 2px solid alpha(@accent_bg_color, 0.85);
+  box-shadow: 0 0 22px alpha(@accent_bg_color, 0.38),
+              inset 0 1px 0 alpha(#ffffff, 0.14);
+  color: #ffffff;
+}
+.owl-play image { -gtk-icon-size: 25px; }
+.owl-play:hover {
+  background-color: alpha(#ffffff, 0.16);
+  box-shadow: 0 0 30px alpha(@accent_bg_color, 0.55), inset 0 1px 0 alpha(#ffffff, 0.18);
+}
+.owl-play:active { background-color: alpha(#ffffff, 0.22); }
+
+.owl-volume { min-width: 88px; }
+.owl-volume trough { min-height: 4px; border-radius: 999px; background-color: alpha(#ffffff, 0.18); box-shadow: none; }
+.owl-volume highlight { border-radius: 999px; background-color: @accent_bg_color; }
+.owl-volume slider {
+  min-height: 12px; min-width: 12px; margin: -5px;
+  border-radius: 999px; background-color: #ffffff;
+  box-shadow: 0 1px 4px alpha(#000000, 0.5);
+}
+
+.owl-watermark {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 2.2px;
+  color: alpha(#ffffff, 0.30);
+}
+
+/* ── The video plane ─────────────────────────────────────────────────── */
+/* Pure black behind the picture: any tint here is visible in letterbox
+   bars, which sit next to the image and give the eye a reference. */
+.owl-stage { background-color: #000000; }
+.owl-stage-empty { background-color: @window_bg_color; }
+.owl-empty-title { font-size: 17px; font-weight: 600; color: alpha(@window_fg_color, 0.70); }
+.owl-empty-sub { font-size: 13px; color: alpha(@window_fg_color, 0.45); }
+
+/* ── Subtitles ───────────────────────────────────────────────────────── */
+/* Text subtitles have to stay readable over an arbitrary picture, and the
+   picture is not ours to change. The traditional answer is the right one:
+   white text, a heavy enough weight to hold its own, and a dark outline
+   built from four offset shadows so there is contrast on every side
+   regardless of what is behind it. No box — a translucent plate is easier
+   to implement and worse to watch, because it covers the film. */
+.owl-subtitle {
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  color: #ffffff;
+  text-shadow:
+     1px  1px 0 alpha(#000000, 0.92),
+    -1px  1px 0 alpha(#000000, 0.92),
+     1px -1px 0 alpha(#000000, 0.92),
+    -1px -1px 0 alpha(#000000, 0.92),
+     0    2px 6px alpha(#000000, 0.75);
+}
+
+/* ── Track menu, hung off the transport's "…" ────────────────────────── */
+.owl-menu { padding: 6px; }
+.owl-menu .owl-menu-heading {
+  font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  color: alpha(@window_fg_color, 0.45);
+  padding: 10px 10px 4px 10px;
+}
+.owl-menu checkbutton {
+  border-radius: 8px;
+  padding: 5px 10px;
+  min-height: 30px;
+}
+.owl-menu checkbutton:hover { background-color: alpha(#ffffff, 0.07); }
+.owl-menu checkbutton label { font-size: 13.5px; }
+.owl-menu button.owl-menu-item {
+  background: transparent; border: none; box-shadow: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-height: 32px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.owl-menu button.owl-menu-item:hover { background-color: alpha(#ffffff, 0.09); }
+.owl-menu separator { margin: 6px 4px; background-color: alpha(#ffffff, 0.08); }
+
+/* ── Chrome that gets out of the way ─────────────────────────────────── */
+/* Everything the viewer is not looking at fades while a film is playing.
+   Opacity rather than visibility, so it cross-fades instead of snapping —
+   and because a widget that disappears changes the layout under the
+   pointer, which is how a click lands on the wrong thing. Input is
+   disabled separately: a fully transparent widget still swallows clicks. */
+.owl-chrome { transition: opacity 220ms ease-out; }
+.owl-chrome.owl-away { opacity: 0; }
+
+/* ── Browsing ────────────────────────────────────────────────────────── */
+.owl-browse { background-color: @view_bg_color; }
+.owl-browse-head { padding: 22px 26px 10px 26px; }
+.owl-browse-title { font-size: 21px; font-weight: 700; letter-spacing: -0.4px; }
+.owl-browse-path {
+  font-size: 12.5px;
+  color: alpha(@window_fg_color, 0.55);
+  font-feature-settings: "tnum";
+}
+.owl-places { padding: 4px 22px 12px 22px; }
+.owl-place {
+  border-radius: 999px;
+  padding: 0 14px;
+  min-height: 28px;
+  font-size: 13px;
+  font-weight: 600;
+  background-color: alpha(#ffffff, 0.07);
+  border: 1px solid alpha(#ffffff, 0.07);
+  box-shadow: none;
+}
+.owl-place:hover { background-color: alpha(#ffffff, 0.12); }
+
+.owl-browse-list { background: transparent; padding: 0 16px 18px 16px; }
+.owl-browse-list row {
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 1px 0;
+  min-height: 40px;
+  transition: background-color 110ms ease-out;
+}
+.owl-browse-list row:hover { background-color: alpha(#ffffff, 0.06); }
+.owl-browse-list row:selected { background-color: alpha(@accent_bg_color, 0.20); }
+.owl-browse-icon { -gtk-icon-size: 17px; color: alpha(@window_fg_color, 0.62); }
+.owl-browse-list row:selected .owl-browse-icon { color: @accent_bg_color; }
+.owl-browse-ext {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: alpha(@window_fg_color, 0.42);
+}
+.owl-browse-empty {
+  padding: 40px;
+  font-size: 14px;
+  color: alpha(@window_fg_color, 0.45);
+}
+
+/* Sidebar entries that do not lead anywhere yet are dimmed rather than
+   removed: the shape of the app is the shape of the design, and a row
+   that looks live but does nothing is worse than one that looks pending. */
+.owl-nav row:disabled { opacity: 0.38; }

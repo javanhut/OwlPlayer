@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8B7FD4"/>
+      <stop offset="1" stop-color="#4C4A8F"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EDEAFB"/>
+      <stop offset="1" stop-color="#C3BEE8"/>
+    </linearGradient>
+    <radialGradient id="eye" cx="0.4" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#7FD4FF"/>
+      <stop offset="0.55" stop-color="#2FA8E8"/>
+      <stop offset="1" stop-color="#11324F"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Head, with the ear tufts pulled out of the same silhouette. -->
+  <path fill="url(#body)" d="M64 14c8 0 12 4 18 10 14 6 24 20 24 38 0 26-19 46-42 46S22 88 22 62c0-18 10-32 24-38 6-6 10-10 18-10z"/>
+  <path fill="url(#body)" d="M30 26c8-2 16 2 20 8-8 2-16 6-22 12-2-8-1-16 2-20zM98 26c-8-2-16 2-20 8 8 2 16 6 22 12 2-8 1-16-2-20z"/>
+
+  <!-- The facial disc: two overlapping circles, the way an owl's face reads. -->
+  <path fill="url(#face)" d="M64 40c14 0 26 10 26 24 0 16-12 26-26 26S38 80 38 64c0-14 12-24 26-24z" opacity="0.92"/>
+
+  <circle cx="50" cy="60" r="15" fill="#1A1826"/>
+  <circle cx="78" cy="60" r="15" fill="#1A1826"/>
+  <circle cx="50" cy="60" r="12" fill="url(#eye)"/>
+  <circle cx="78" cy="60" r="12" fill="url(#eye)"/>
+  <circle cx="50" cy="60" r="5" fill="#0B0B12"/>
+  <circle cx="78" cy="60" r="5" fill="#0B0B12"/>
+  <circle cx="46" cy="55" r="3.4" fill="#ffffff" opacity="0.92"/>
+  <circle cx="74" cy="55" r="3.4" fill="#ffffff" opacity="0.92"/>
+
+  <!-- Beak, doubling as a play triangle. -->
+  <path fill="#F5A742" d="M64 68l9 11c0 5-4 9-9 9s-9-4-9-9z"/>
+</svg>

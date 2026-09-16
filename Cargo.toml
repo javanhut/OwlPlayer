@@ -1,0 +1,60 @@
+# OwlPlayer — a media player for Raven Linux.
+#
+# Three crates, split along the one line that matters in a player: the
+# decode threads must never touch GTK, and the GTK thread must never
+# block on a decoder.
+#
+#   owl-media   FFmpeg. Demux, decode, resample, A/V clock. No GTK, no GL.
+#   owl-render  The video plane. GL textures and colour shaders. No GTK.
+#   owl-player  The app. GTK4 + libadwaita wearing Raven Glass.
+[workspace]
+resolver = "3"
+members = ["crates/owl-media", "crates/owl-render", "crates/owl-player"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/javanhut/OwlPlayer"
+
+[workspace.dependencies]
+# Pinned to the same gtk-rs generation as RavenViewer, RavenStore,
+# RavenSettingsUI and RavenFileManager so every Raven app resolves one
+# set of bindings.
+gtk4 = { version = "0.10", features = ["v4_12"] }
+libadwaita = { version = "0.8", features = ["v1_7"] }
+glib = "0.21"
+gio = "0.21"
+gdk = { package = "gdk4", version = "0.10" }
+
+# FFmpeg 9.0. The system carries n9.0.1; ffmpeg-sys-next probes it and
+# lights up cfg(feature = "ffmpeg_9_0"). Building this needs libclang —
+# see .cargo/config.toml.
+ffmpeg-next = "9.0"
+
+anyhow = "1"
+thiserror = "2"
+crossbeam-channel = "0.5"
+parking_lot = "0.12"
+log = "0.4"
+env_logger = "0.11"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+[profile.release]
+# A player is a soft-realtime program: one slow frame is visible. Optimise
+# across crate boundaries and keep symbols for perf(1).
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+debug = 1
+
+[profile.dev]
+# Decoding 4K in a debug build is unwatchable unless the dependencies —
+# FFmpeg glue, colour conversion — are optimised.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
