@@ -11,25 +11,29 @@ PROFILE   ?= release
 CARGO_FLAGS := $(if $(filter release,$(PROFILE)),--release,)
 TARGET_DIR  := target/$(PROFILE)
 
-.PHONY: all build run test check clean install uninstall set-default smoke
+.PHONY: all deps build run test check clean install uninstall set-default smoke
 
 all: build
 
-build:
+# Installs, with rvn, whatever the build needs and this machine lacks.
+deps:
+	sh scripts/deps.sh
+
+build: deps
 	cargo build --locked $(CARGO_FLAGS)
 
-run:
+run: deps
 	cargo run $(CARGO_FLAGS) -p owl-player -- $(FILE)
 
 # Headless check of the engine: demux, decode, seek and shut down, with no
 # window and no GL. `make smoke FILE=some.mkv`.
-smoke:
+smoke: deps
 	cargo run $(CARGO_FLAGS) -p owl-media --example smoke -- $(FILE)
 
-test:
+test: deps
 	cargo test --locked
 
-check:
+check: deps
 	cargo fmt --check
 	cargo clippy --locked --all-targets -- -D warnings
 	cargo test --locked

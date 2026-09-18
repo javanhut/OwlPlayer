@@ -505,8 +505,23 @@ impl Renderer {
                 gl::ActiveTexture(gl::TEXTURE0 + i);
                 gl::BindTexture(gl::TEXTURE_2D, self.textures[i as usize]);
             }
+            // The full-screen triangle is three times the size of what it
+            // covers; scaled down for letterboxing, it still reaches into
+            // the bars, where its texture coordinates run past the edge of
+            // the frame. Clamped, those smear the border pixels across the
+            // bars, and the triangle's long edge leaves a black wedge
+            // beyond it. Scissor it to the picture.
+            let (x, y, w, h) = self.video_rect(width, height);
+            gl::Enable(gl::SCISSOR_TEST);
+            gl::Scissor(
+                x.round() as i32,
+                y.round() as i32,
+                w.round() as i32,
+                h.round() as i32,
+            );
             gl::BindVertexArray(self.vao);
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
+            gl::Disable(gl::SCISSOR_TEST);
 
             self.draw_subtitles(sx, sy);
             gl::BindVertexArray(0);

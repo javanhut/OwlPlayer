@@ -17,31 +17,41 @@ target = "target/release/{{binary}}"
 
 [commands]
 
+[commands.deps]
+desc = "Install what the build needs and this machine lacks (GTK 4, libadwaita, FFmpeg headers, clang, lld) with rvn"
+run = ["sh scripts/deps.sh"]
+
 [commands.build]
 desc = "Build release binary"
 alias = ["b"]
+dep = ["deps"]
 run = ["cargo build --locked --release"]
 
 [commands.run]
 desc = "Build and run (pass a file with: imlazy run -- FILE)"
 alias = ["r", "dev", "d"]
+dep = ["deps"]
 run = ["cargo run -p owl-player --"]
 
 [commands.smoke]
 desc = "Headless engine check — demux, decode, seek, shut down. No window, no GL (imlazy smoke -- FILE)"
+dep = ["deps"]
 run = ["cargo run -p owl-media --example smoke --"]
 
 [commands.audio]
 desc = "List the audio devices cpal can see and which of them accept a stream"
+dep = ["deps"]
 run = ["cargo run -p owl-media --example audio-probe"]
 
 [commands.test]
 desc = "Run all tests"
 alias = ["t"]
+dep = ["deps"]
 run = ["cargo test --locked"]
 
 [commands.check]
 desc = "Run formatting, Clippy, and the test suite"
+dep = ["deps"]
 run = [
   "cargo fmt --check",
   "cargo clippy --locked --all-targets -- -D warnings",
