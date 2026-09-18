@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use crossbeam_channel::{Receiver, Sender, TrySendError, bounded};
+use crossbeam_channel::{Receiver, Sender, TrySendError, unbounded};
 use ffmpeg_next as ff;
 use parking_lot::{Condvar, Mutex};
 
@@ -31,8 +31,14 @@ use crate::player::Event;
 /// frame without the memory cost mattering even at 4K, and short enough
 /// that a seek does not have much to throw away.
 const VIDEO_QUEUE: usize = 4;
-/// Packets buffered between the demuxer and a decoder.
+/// Packets the demuxer tries to keep queued for each decoder. Reading ahead
+/// stops once *every* playing stream has this many -- not when any one of
+/// them does. See `throttled`.
 const PACKET_QUEUE: usize = 64;
+/// The most one queue may hold however starved another is: a backstop
+/// against a file whose streams are interleaved minutes apart, not a
+/// limit ordinary files come near.
+const PACKET_QUEUE_MAX: usize = 4096;
 
 /// A packet plus the seek generation it belongs to.
 struct Tagged {
@@ -316,9 +322,12 @@ pub fn start(
         return Err(Error::NoPlayableStream(path));
     }
 
-    let (video_tx, video_rx) = bounded::<Tagged>(PACKET_QUEUE);
-    let (audio_tx, audio_rx) = bounded::<Tagged>(PACKET_QUEUE);
-    let (subtitle_tx, subtitle_rx) = bounded::<Tagged>(PACKET_QUEUE);
+    // Unbounded channels, with the demuxer doing the bounding: a fixed-size
+    // channel blocks the demuxer on whichever stream is full, and if the
+    // other one runs dry meanwhile nothing refills it (see `throttled`).
+    let (video_tx, video_rx) = unbounded::<Tagged>();
+    let (audio_tx, audio_rx) = unbounded::<Tagged>();
+    let (subtitle_tx, subtitle_rx) = unbounded::<Tagged>();
 
     let video_handle = selection.video.map(|index| {
         let params = input.stream(index).expect("checked").parameters();
@@ -401,6 +410,14 @@ fn demux_loop(
     commands: Receiver<DemuxCommand>,
 ) {
     let mut eof = false;
+    // Where, on the timeline, the last packet read for a playing stream
+    // ends. At the end of the file this is where playback will finish, and
+    // EndOfFile waits for the clock to get there.
+    let mut last_end = 0.0f64;
+    let mut eof_sent = false;
+    // The clock as last seen after the end of the file, and since when it
+    // has stood there.
+    let mut eof_clock = (f64::NAN, std::time::Instant::now());
     // Taken out of the `Option` when a decoder disconnects, so a dead
     // consumer stops being routed to instead of stopping the demuxer.
     let mut video_out = Some(video_tx);
@@ -430,6 +447,9 @@ fn demux_loop(
                         log::warn!("seek to {target:.3}s failed: {e}");
                     }
                     eof = false;
+                    eof_sent = false;
+                    eof_clock = (f64::NAN, std::time::Instant::now());
+                    last_end = target;
                     let _ = events.send(Event::Seeked(target));
                 }
             }
@@ -438,18 +458,56 @@ fn demux_loop(
         if eof {
             // Stay alive after the last packet: the decoders may still be
             // draining, and a seek can bring the file back to life.
+            //
+            // Reading the last packet is not the end of playback: the
+            // queues hold seconds of picture and sound still to come. So
+            // EndOfFile waits until the clock reaches the end of what was
+            // read. Sent on reading it, a short file stopped several
+            // seconds early with everything queued unplayed. Paused, the
+            // clock does not move and the event waits with it.
+            //
+            // The clock follows the audio, so a file whose sound ends before
+            // its picture can leave it parked short of `last_end`. A clock
+            // that has stood still for a second while not paused, after the
+            // last packet, has nothing left to play either.
+            let now = shared.clock.now();
+            if now != eof_clock.0 || shared.clock.is_paused() {
+                eof_clock = (now, std::time::Instant::now());
+            }
+            let stalled = eof_clock.1.elapsed() > std::time::Duration::from_secs(1);
+            if !eof_sent && (now >= last_end - 0.05 || stalled) {
+                eof_sent = true;
+                let _ = events.send(Event::EndOfFile);
+            }
             std::thread::sleep(std::time::Duration::from_millis(20));
+            continue;
+        }
+
+        // Read ahead only while some stream is short of packets. Waiting
+        // here, before the read, rather than on a full queue after it, is
+        // what keeps a player from deadlocking: with bounded queues the
+        // demuxer parked on a full video queue, stopped reading, and the
+        // audio queue ran dry behind it -- and audio drives the clock, so
+        // no more video fell due, the video queue never drained, and
+        // playback froze a few seconds in with the state still Playing.
+        if throttled(&video_out, &audio_out, &subtitle_out) {
+            std::thread::sleep(std::time::Duration::from_millis(2));
             continue;
         }
 
         let generation = shared.generation.load(Ordering::SeqCst);
         let Some((stream, packet)) = input.packets().next() else {
             eof = true;
-            let _ = events.send(Event::EndOfFile);
             continue;
         };
 
         let index = stream.index();
+        if (Some(index) == selection.video || Some(index) == selection.audio)
+            && let Some(pts) = packet.pts()
+        {
+            let tb = f64::from(stream.time_base());
+            last_end = last_end.max((pts + packet.duration().max(0)) as f64 * tb);
+        }
         let slot = if Some(index) == selection.video {
             Some(&mut video_out)
         } else if Some(index) == selection.audio {
@@ -462,19 +520,12 @@ fn demux_loop(
 
         if let Some(slot) = slot {
             let Some(tx) = slot.as_ref() else { continue };
-            let mut tagged = Tagged { packet, generation };
-            // Never block forever on a full queue: a seek arriving while
-            // we are parked here would not be seen until the decoder drained.
-            loop {
+            let tagged = Tagged { packet, generation };
+            // The channels are unbounded, so this never waits: how far
+            // ahead to read is decided before the read, by `throttled`.
+            {
                 match tx.try_send(tagged) {
-                    Ok(()) => break,
-                    Err(TrySendError::Full(back)) => {
-                        tagged = back;
-                        if shared.stopping() || !commands.is_empty() {
-                            break;
-                        }
-                        std::thread::sleep(std::time::Duration::from_millis(2));
-                    }
+                    Ok(()) | Err(TrySendError::Full(_)) => {}
                     Err(TrySendError::Disconnected(_)) => {
                         // That decoder has gone — most often because the
                         // sound card would not open, which is not a reason
@@ -483,7 +534,6 @@ fn demux_loop(
                         // instead would kill demuxing outright, stalling
                         // video and silently swallowing every later seek.
                         *slot = None;
-                        break;
                     }
                 }
             }
@@ -492,6 +542,29 @@ fn demux_loop(
             }
         }
     }
+}
+
+/// Whether the demuxer has read far enough ahead for now.
+///
+/// It stops only when every stream that plays -- video and audio -- already
+/// has `PACKET_QUEUE` packets waiting, never because one of them does: a
+/// stream that is short keeps reading going, however full the other is, so
+/// a file that interleaves its audio late behind its video cannot starve the
+/// clock. Subtitles are left out of that test, since a sparse track is short
+/// of packets for minutes at a time. `PACKET_QUEUE_MAX` caps any one queue,
+/// subtitles included, whatever the others need.
+fn throttled(
+    video: &Option<Sender<Tagged>>,
+    audio: &Option<Sender<Tagged>>,
+    subtitle: &Option<Sender<Tagged>>,
+) -> bool {
+    let lens = |tx: &Option<Sender<Tagged>>| tx.as_ref().map(Sender::len);
+    let playing: Vec<usize> = [lens(video), lens(audio)].into_iter().flatten().collect();
+    let over_cap = [lens(video), lens(audio), lens(subtitle)]
+        .into_iter()
+        .flatten()
+        .any(|n| n >= PACKET_QUEUE_MAX);
+    over_cap || (!playing.is_empty() && playing.iter().all(|&n| n >= PACKET_QUEUE))
 }
 
 fn video_loop(
