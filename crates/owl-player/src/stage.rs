@@ -66,6 +66,23 @@ impl Stage {
             }
         });
 
+        // desktop.toml changed: the clear colour and the visualiser's
+        // accent are ours to update, GTK only restyles its own widgets.
+        crate::theme::connect_changed({
+            let area = area.downgrade();
+            let renderer = Rc::downgrade(&renderer);
+            move || {
+                if let Some(renderer) = renderer.upgrade()
+                    && let Some(r) = renderer.borrow_mut().as_mut()
+                {
+                    r.set_backdrop(crate::theme::backdrop());
+                }
+                if let Some(area) = area.upgrade() {
+                    area.queue_render();
+                }
+            }
+        });
+
         area.connect_unrealize({
             let renderer = Rc::clone(&renderer);
             move |area| {
@@ -84,7 +101,6 @@ impl Stage {
             let video_rect = Rc::clone(&video_rect);
             // The generation of the subtitle set already on screen.
             let seen = Cell::new(u64::MAX);
-            let accent = crate::theme::accent_rgb();
             move |area, _ctx| {
                 let mut renderer = renderer.borrow_mut();
                 let Some(renderer) = renderer.as_mut() else {
@@ -103,7 +119,7 @@ impl Stage {
                 // is: it has to keep up with the display, not with GTK.
                 if let Some(levels) = player.borrow().spectrum() {
                     renderer.clear_frame();
-                    renderer.draw_spectrum(width, height, &levels, accent);
+                    renderer.draw_spectrum(width, height, &levels, crate::theme::accent_rgb());
                     video_rect.set((0.0, 0.0, area.width() as f32, area.height() as f32));
                     return glib::Propagation::Stop;
                 }

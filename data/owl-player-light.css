@@ -1,0 +1,55 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   OwlPlayer, light. Laid over owl-player.css (after raven-glass-light.css)
+   when the desktop's theme mode is light. owl-player.css draws its chrome
+   for a dark ground — white hairlines, white hover washes, white labels on
+   the selected row — which vanish on Raven's light window colour. Only the
+   chrome is restated here: what sits over the picture itself (the stage
+   title, the format chips, subtitles) stays white, because the picture is
+   dark or bright regardless of the desktop.
+   ───────────────────────────────────────────────────────────────────────── */
+
+window.owl windowcontrols button { color: alpha(@window_fg_color, 0.72); }
+window.owl windowcontrols button:hover { background-color: alpha(#000000, 0.08); color: @window_fg_color; }
+
+.owl-sidebar { border-right-color: alpha(#000000, 0.07); }
+.owl-brand .owl-wordmark { color: @window_fg_color; }
+.owl-nav row:hover { background-color: alpha(#000000, 0.05); }
+.owl-nav row:selected { box-shadow: 0 2px 12px alpha(@accent_bg_color, 0.18), inset 0 1px 0 alpha(#ffffff, 0.40); }
+.owl-nav row:selected image, .owl-nav row:selected label { color: @window_fg_color; }
+
+.owl-panel {
+  border-color: alpha(#000000, 0.08);
+  box-shadow: 0 18px 48px alpha(#000000, 0.18), inset 0 1px 0 alpha(#ffffff, 0.50);
+}
+.owl-tabs { border-bottom-color: alpha(#000000, 0.08); }
+.owl-tabs button:checked { color: @window_fg_color; }
+.owl-queue row:hover { background-color: alpha(#000000, 0.05); }
+.owl-queue row:selected .owl-item-title { color: @window_fg_color; }
+.owl-queue .owl-thumb {
+  background-color: alpha(#000000, 0.08);
+  box-shadow: inset 0 0 0 1px alpha(#000000, 0.08);
+}
+.owl-panel-foot { border-top-color: alpha(#000000, 0.08); }
+.owl-panel-foot button:hover { background-color: alpha(#000000, 0.06); }
+
+.owl-scrubber trough, .owl-volume trough { background-color: alpha(#000000, 0.14); }
+.owl-scrubber fill { background-color: alpha(#000000, 0.20); }
+.owl-scrubber slider, .owl-volume slider { box-shadow: 0 1px 4px alpha(#000000, 0.30), 0 0 0 1px alpha(#000000, 0.08); }
+.owl-tbtn:hover { background-color: alpha(#000000, 0.06); color: @window_fg_color; }
+.owl-tbtn:checked { background-color: alpha(#000000, 0.10); color: @window_fg_color; }
+.owl-play {
+  background-color: alpha(#ffffff, 0.60);
+  box-shadow: 0 0 22px alpha(@accent_bg_color, 0.30), inset 0 1px 0 alpha(#ffffff, 0.60);
+  color: @window_fg_color;
+}
+.owl-play:hover { background-color: alpha(#ffffff, 0.85); }
+.owl-play:active { background-color: alpha(#000000, 0.06); }
+.owl-watermark { color: alpha(@window_fg_color, 0.30); }
+
+.owl-menu checkbutton:hover { background-color: alpha(#000000, 0.05); }
+.owl-menu button.owl-menu-item:hover { background-color: alpha(#000000, 0.06); }
+.owl-menu separator { background-color: alpha(#000000, 0.08); }
+
+.owl-place { background-color: alpha(#000000, 0.05); border-color: alpha(#000000, 0.07); }
+.owl-place:hover { background-color: alpha(#000000, 0.09); }
+.owl-browse-list row:hover { background-color: alpha(#000000, 0.05); }
