@@ -45,8 +45,8 @@ pub fn connect_changed(f: impl Fn() + 'static) {
     LISTENERS.with(|l| l.borrow_mut().push(Box::new(f)));
 }
 
-/// Re-read desktop.toml and apply it: light/dark, the accent, and glass on
-/// the open windows. The overlay provider is replaced, never stacked.
+/// Re-read desktop.toml and apply it: light/dark, the accent, the glass
+/// theme, and glass on the open windows. The overlay provider is replaced, never stacked.
 fn refresh() {
     let appearance = Desktop::load().appearance;
     adw::StyleManager::default().set_color_scheme(match appearance.theme_mode {
@@ -57,7 +57,7 @@ fn refresh() {
     let accent = if is_hex(&appearance.accent) { appearance.accent.as_str() } else { DEFAULT_ACCENT };
     let light = appearance.theme_mode == ThemeMode::Light;
     let css = format!(
-        "@define-color accent_bg_color {accent};\n@define-color accent_color {accent};\n{}",
+        "@define-color accent_bg_color {accent};\n@define-color accent_color {accent};\n{}{}",
         if light {
             concat!(
                 include_str!("../../../data/raven-glass-light.css"),
@@ -65,7 +65,8 @@ fn refresh() {
             )
         } else {
             ""
-        }
+        },
+        crate::glass_tint::css(&appearance.glass_theme, light),
     );
     if let Some(display) = gtk::gdk::Display::default() {
         OVERLAY.with(|slot| {
@@ -148,11 +149,27 @@ fn watch_desktop() {
 
 /// The window background, as the GL stage should clear to when no film is
 /// loaded. Matches `@window_bg_color` in whichever of the two Raven
-/// stylesheets is in force. Auto is dark in every Raven app.
+/// stylesheets is in force, re-tinted by the glass theme. Auto is dark in
+/// every Raven app.
 pub fn backdrop() -> [f32; 3] {
-    let light = CURRENT.with(|c| c.borrow().theme_mode == ThemeMode::Light);
+    let (light, tint) = CURRENT.with(|c| {
+        let c = c.borrow();
+        let light = c.theme_mode == ThemeMode::Light;
+        (light, crate::glass_tint::css(&c.glass_theme, light))
+    });
+    if let Some(ground) = tinted_ground(&tint) {
+        return ground;
+    }
     // #17171d and #f2f2f7.
     if light { [0.949, 0.949, 0.969] } else { [0.090, 0.090, 0.114] }
+}
+
+/// The `window_bg_color` a glass theme defines, or `None` for Black Glass.
+fn tinted_ground(tint: &str) -> Option<[f32; 3]> {
+    let hex = tint.split("@define-color window_bg_color #").nth(1)?.get(..6)?;
+    let channel =
+        |from: usize| u8::from_str_radix(&hex[from..from + 2], 16).ok().map(|v| v as f32 / 255.0);
+    Some([channel(0)?, channel(2)?, channel(4)?])
 }
 
 /// The desktop's accent colour, for the parts of the picture GTK does not
