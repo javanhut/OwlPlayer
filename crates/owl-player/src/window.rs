@@ -284,10 +284,6 @@ fn build_sidebar() -> (gtk::Box, Vec<gtk::ListBox>) {
     let rule = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     rule.add_css_class("owl-rule");
     rule.set_halign(gtk::Align::Start);
-    let blurb = gtk::Label::new(Some("Great stories\nlook better here."));
-    blurb.add_css_class("owl-blurb");
-    blurb.set_xalign(0.0);
-    footer.append(&blurb);
     footer.append(&rule);
     sidebar.append(&footer);
     (sidebar, vec![primary, media])
@@ -737,7 +733,6 @@ fn wire(ui: &Rc<Ui>, t: &TransportWidgets) {
                     // leaves the selection where it was.
                     "queue" => {
                         ui.queue_wanted.set(!ui.queue_wanted.get());
-                        ui.config.borrow_mut().show_queue = ui.queue_wanted.get();
                         ui.apply_chrome();
                         list.unselect_row(row);
                     }

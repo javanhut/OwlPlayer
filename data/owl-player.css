@@ -94,10 +94,6 @@ window.owl:not(.glass) .owl-sidebar { background-color: @sidebar_bg_color; }
 }
 
 .owl-sidebar-footer { padding: 16px 14px 18px 14px; }
-.owl-sidebar-footer .owl-blurb {
-  font-size: 13px; font-weight: 500; line-height: 1.35;
-  color: alpha(@window_fg_color, 0.62);
-}
 .owl-rule { min-height: 2px; min-width: 26px; border-radius: 999px; background-color: @accent_bg_color; }
 
 /* ── Now-playing title, over the video ───────────────────────────────── */
