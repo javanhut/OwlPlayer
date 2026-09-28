@@ -13,3 +13,10 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 # on this machine fails the build with "Unable to find libclang" even with
 # /usr/lib/libclang.so installed. For a libclang somewhere unusual, export
 # LIBCLANG_PATH in the environment instead.
+
+# Build Raven Glass from the RavenGUI checkout beside this one rather than the
+# copy on GitHub, so a change to the shared look is tried here before it is
+# pushed. The image build checks every app out beside RavenGUI, so it takes
+# this path too. Delete this table to use the git dependency as it is.
+[patch."https://github.com/javanhut/RavenGUI.git"]
+raven-glass = { path = "../RavenGUI/crates/raven-glass" }

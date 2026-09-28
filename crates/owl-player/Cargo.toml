@@ -19,6 +19,7 @@ libadwaita.workspace = true
 glib.workspace = true
 gio.workspace = true
 gdk.workspace = true
+raven-glass.workspace = true
 anyhow.workspace = true
 log.workspace = true
 env_logger.workspace = true

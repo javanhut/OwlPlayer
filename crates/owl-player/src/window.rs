@@ -87,7 +87,7 @@ pub fn build(app: &adw::Application) -> Rc<Ui> {
         .title("Owl Player")
         .build();
     // `raven` is what the shared stylesheet keys off: every `window.raven`
-    // rule in raven-glass.css — the window surface, the glass treatment,
+    // rule in Raven Glass (the raven-glass crate) — the window surface, the glass treatment,
     // the CSD radius, the dimmed-text fixes — matches on this class and on
     // nothing else. Without it the player loads the Raven sheet and then
     // ignores almost all of it.

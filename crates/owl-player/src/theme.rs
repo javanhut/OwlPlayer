@@ -1,6 +1,6 @@
-//! The look: Raven Glass, the stylesheet shared with Raven Settings, Store,
-//! Viewer and Power (`data/raven-glass.css`), plus the classes only the
-//! player draws (`data/owl-player.css`). Accent and light/dark come from
+//! The look: Raven Glass, the stylesheet every Raven app shares (the
+//! raven-glass crate in RavenGUI, read from /usr/share/raven/glass/), plus
+//! the classes only the player draws (`data/owl-player.css`). Accent and light/dark come from
 //! desktop.toml, exactly as in the other Raven apps.
 
 use std::cell::RefCell;
@@ -13,8 +13,7 @@ use libadwaita as adw;
 
 use crate::config::{Appearance, DEFAULT_ACCENT, Desktop, ThemeMode};
 
-const BASE_CSS: &str =
-    concat!(include_str!("../../../data/raven-glass.css"), include_str!("../../../data/owl-player.css"));
+const OWL_CSS: &str = include_str!("../../../data/owl-player.css");
 
 /// How long desktop.toml has to be quiet before it is re-read: one save is
 /// a burst of events (create, write, rename).
@@ -33,7 +32,7 @@ thread_local! {
 pub fn apply() {
     let display = gtk::gdk::Display::default().expect("no display");
     let base = gtk::CssProvider::new();
-    base.load_from_string(BASE_CSS);
+    base.load_from_string(&format!("{}{OWL_CSS}", raven_glass::base_css()));
     gtk::style_context_add_provider_for_display(&display, &base, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
     refresh();
     watch_desktop();
@@ -57,16 +56,10 @@ fn refresh() {
     let accent = if is_hex(&appearance.accent) { appearance.accent.as_str() } else { DEFAULT_ACCENT };
     let light = appearance.theme_mode == ThemeMode::Light;
     let css = format!(
-        "@define-color accent_bg_color {accent};\n@define-color accent_color {accent};\n{}{}",
-        if light {
-            concat!(
-                include_str!("../../../data/raven-glass-light.css"),
-                include_str!("../../../data/owl-player-light.css")
-            )
-        } else {
-            ""
-        },
-        crate::glass_tint::css(&appearance.glass_theme, light),
+        "@define-color accent_bg_color {accent};\n@define-color accent_color {accent};\n{}{}{}",
+        if light { raven_glass::light_css() } else { "" },
+        if light { include_str!("../../../data/owl-player-light.css") } else { "" },
+        raven_glass::tint::css(&appearance.glass_theme, light),
     );
     if let Some(display) = gtk::gdk::Display::default() {
         OVERLAY.with(|slot| {
@@ -155,7 +148,7 @@ pub fn backdrop() -> [f32; 3] {
     let (light, tint) = CURRENT.with(|c| {
         let c = c.borrow();
         let light = c.theme_mode == ThemeMode::Light;
-        (light, crate::glass_tint::css(&c.glass_theme, light))
+        (light, raven_glass::tint::css(&c.glass_theme, light))
     });
     if let Some(ground) = tinted_ground(&tint) {
         return ground;

@@ -5,7 +5,6 @@
 
 mod browse;
 mod config;
-mod glass_tint;
 mod queue;
 mod stage;
 mod theme;
