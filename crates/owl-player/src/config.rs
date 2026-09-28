@@ -74,7 +74,7 @@ impl Default for PlayerConfig {
     fn default() -> Self {
         Self {
             show_sidebar: true,
-            show_queue: true,
+            show_queue: false,
             volume: 1.0,
             remember_position: true,
             positions: Default::default(),

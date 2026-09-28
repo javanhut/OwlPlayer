@@ -77,6 +77,7 @@ pub struct Ui {
 
 pub fn build(app: &adw::Application) -> Rc<Ui> {
     let config = PlayerConfig::load();
+    let show_queue = config.show_queue;
     let player = Rc::new(RefCell::new(Player::new()));
     player.borrow_mut().set_volume(config.volume);
 
@@ -193,7 +194,7 @@ pub fn build(app: &adw::Application) -> Rc<Ui> {
         watermark: watermark.clone(),
         top_bar: top_bar.clone(),
         transport: transport.container.clone(),
-        queue_wanted: Cell::new(true),
+        queue_wanted: Cell::new(show_queue),
         last_activity: Cell::new(std::time::Instant::now()),
         pointer: Cell::new((0.0, 0.0)),
         pointer_inside: Cell::new(false),
@@ -736,6 +737,7 @@ fn wire(ui: &Rc<Ui>, t: &TransportWidgets) {
                     // leaves the selection where it was.
                     "queue" => {
                         ui.queue_wanted.set(!ui.queue_wanted.get());
+                        ui.config.borrow_mut().show_queue = ui.queue_wanted.get();
                         ui.apply_chrome();
                         list.unselect_row(row);
                     }
