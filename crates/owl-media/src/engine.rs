@@ -779,9 +779,16 @@ fn audio_loop(
     let out_channels = sink.state.channels;
     let out_layout = ff::ChannelLayout::default(out_channels as i32);
 
+    // PCM in a WAV or AIFF often declares a channel count but no layout.
+    // swresample quietly swaps that for the default layout when it is built,
+    // and then rejects every frame -- still layout-less -- as a format
+    // change, so the file "plays" in perfect silence. Name the layout here
+    // and stamp it on each frame below so the two always agree.
+    let in_layout = concrete_layout(decoder.channel_layout(), decoder.channels());
+
     let mut resampler = match ff::software::resampling::Context::get(
         decoder.format(),
-        decoder.channel_layout(),
+        in_layout,
         decoder.rate(),
         ff::format::Sample::F32(ff::format::sample::Type::Packed),
         out_layout,
@@ -850,8 +857,23 @@ fn audio_loop(
                 }
             }
 
-            let mut out = ff::frame::Audio::empty();
-            if resampler.run(&frame, &mut out).is_err() {
+            if frame.channel_layout().is_empty() {
+                frame.set_channel_layout(concrete_layout(frame.channel_layout(), frame.channels()));
+            }
+
+            // Sized by swresample itself. Left empty, ffmpeg-next sizes the
+            // output to the *input* sample count, so upsampling (44.1 kHz
+            // to a 48 kHz card) left the surplus stranded inside swr: it
+            // piled up for the whole track, the end of every song was never
+            // heard, and a seek replayed the stale backlog.
+            let capacity = unsafe { ff::ffi::swr_get_out_samples(resampler.as_mut_ptr(), frame.samples() as i32) };
+            let mut out = ff::frame::Audio::new(
+                ff::format::Sample::F32(ff::format::sample::Type::Packed),
+                capacity.max(frame.samples() as i32) as usize,
+                out_layout,
+            );
+            if let Err(e) = resampler.run(&frame, &mut out) {
+                log::debug!("audio resample: {e}");
                 continue;
             }
             let samples = out.samples() * out_channels as usize;
@@ -874,6 +896,12 @@ fn audio_loop(
             sink.push_blocking(&interleaved, &stopping);
         }
     }
+}
+
+/// A layout swresample will accept: the declared one if there is one,
+/// otherwise the standard layout for that many channels.
+fn concrete_layout(layout: ff::ChannelLayout, channels: u16) -> ff::ChannelLayout {
+    if layout.is_empty() { ff::ChannelLayout::default(i32::from(channels).max(1)) } else { layout }
 }
 
 /// Decode the selected subtitle stream.

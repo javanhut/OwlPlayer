@@ -21,6 +21,8 @@ pub enum TrackKind {
 pub struct Track {
     pub index: usize,
     pub kind: TrackKind,
+    /// FFmpeg's name for the codec ("h264", "pcm_s16le"), not the
+    /// decoder's ("mp3float", "libdav1d"). `codec_label` makes it readable.
     pub codec: String,
     /// ISO 639 code from the container, e.g. "eng". Absent in plenty of
     /// real files, which is why the UI falls back to "Track N".
@@ -59,12 +61,12 @@ impl Track {
                     8 => "7.1".to_string(),
                     n => format!("{n} ch"),
                 };
-                format!("{lang} · {layout} · {}", self.codec.to_uppercase())
+                format!("{lang} · {layout} · {}", codec_label(&self.codec))
             }
             TrackKind::Subtitle => {
                 if self.is_forced { format!("{lang} (Forced)") } else { lang.to_string() }
             }
-            TrackKind::Video => format!("{}×{} · {}", self.width, self.height, self.codec.to_uppercase()),
+            TrackKind::Video => format!("{}×{} · {}", self.width, self.height, codec_label(&self.codec)),
         }
     }
 }
@@ -136,17 +138,7 @@ impl MediaInfo {
             });
         }
         if let Some(a) = self.tracks_of(TrackKind::Audio).next() {
-            let name = match a.codec.as_str() {
-                "eac3" => "Dolby Digital+".into(),
-                "ac3" => "Dolby Digital".into(),
-                "truehd" => "Dolby TrueHD".into(),
-                "dts" => "DTS".into(),
-                "flac" => "FLAC".into(),
-                "aac" => "AAC".into(),
-                "opus" => "Opus".into(),
-                other => other.to_uppercase(),
-            };
-            chips.push(name);
+            chips.push(codec_label(&a.codec));
         }
         chips
     }
@@ -256,7 +248,61 @@ fn track_of(s: &ff::format::stream::Stream) -> Option<Track> {
 }
 
 fn codec_name(id: ff::codec::Id) -> String {
-    ff::codec::decoder::find(id).map(|c| c.name().to_string()).unwrap_or_else(|| format!("{id:?}").to_lowercase())
+    id.name().to_string()
+}
+
+/// What a person calls a codec. PCM in all its bit depths and byte orders
+/// is just "PCM": to a listener it is uncompressed audio, and "PCM_S24LE"
+/// is noise. Anything unlisted falls back to FFmpeg's name, uppercased.
+fn codec_label(codec: &str) -> String {
+    if codec.starts_with("pcm_") {
+        return "PCM".into();
+    }
+    if codec.starts_with("adpcm_") {
+        return "ADPCM".into();
+    }
+    let name = match codec {
+        // Audio.
+        "eac3" => "Dolby Digital+",
+        "ac3" => "Dolby Digital",
+        "truehd" => "Dolby TrueHD",
+        "dts" => "DTS",
+        "mp3" => "MP3",
+        "mp2" => "MP2",
+        "flac" => "FLAC",
+        "aac" => "AAC",
+        "opus" => "Opus",
+        "vorbis" => "Vorbis",
+        "alac" => "ALAC",
+        "wavpack" => "WavPack",
+        "speex" => "Speex",
+        "wmav1" | "wmav2" => "WMA",
+        "wmapro" => "WMA Pro",
+        "wmalossless" => "WMA Lossless",
+        "ape" => "Monkey's Audio",
+        "musepack7" | "musepack8" => "Musepack",
+        "tta" => "TTA",
+        "amr_nb" | "amr_wb" => "AMR",
+        n if n.starts_with("dsd_") => "DSD",
+        // Video.
+        "h264" => "H.264",
+        "hevc" => "HEVC",
+        "h263" => "H.263",
+        "vp8" => "VP8",
+        "vp9" => "VP9",
+        "av1" => "AV1",
+        "mpeg4" => "MPEG-4",
+        "mpeg2video" => "MPEG-2",
+        "mpeg1video" => "MPEG-1",
+        "prores" => "ProRes",
+        "theora" => "Theora",
+        "wmv1" | "wmv2" | "wmv3" => "WMV",
+        "vc1" => "VC-1",
+        "flv1" => "Sorenson",
+        "rawvideo" => "Raw",
+        other => return other.to_uppercase(),
+    };
+    name.into()
 }
 
 /// The handful of languages worth spelling out. Anything else shows its
@@ -283,5 +329,23 @@ fn language_name(code: &str) -> &str {
         "pol" | "pl" => "Polish",
         "tur" | "tr" => "Turkish",
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codec_labels_read_as_formats() {
+        assert_eq!(codec_label("pcm_s16le"), "PCM");
+        assert_eq!(codec_label("pcm_f32be"), "PCM");
+        assert_eq!(codec_label("adpcm_ima_wav"), "ADPCM");
+        assert_eq!(codec_label("wmav2"), "WMA");
+        assert_eq!(codec_label("mp3"), "MP3");
+        assert_eq!(codec_label("h264"), "H.264");
+        assert_eq!(codec_label("eac3"), "Dolby Digital+");
+        assert_eq!(codec_label("dsd_lsbf_planar"), "DSD");
+        assert_eq!(codec_label("something_new"), "SOMETHING_NEW");
     }
 }
